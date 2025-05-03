@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: 'QuizTime Champions', // Updated title
-  description: 'Real-time quiz application', // Updated description
+  description: 'Real-time anonymous quiz application with stats', // Updated description
 };
 
 export default function RootLayout({
@@ -26,6 +26,19 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        {/* Basic Header Example (Optional) */}
+        {/*
+        <header className="bg-card border-b p-4">
+            <nav className="container mx-auto flex justify-between items-center">
+                <a href="/" className="text-lg font-bold text-primary">QuizTime</a>
+                <div>
+                    <a href="/quiz" className="mr-4 hover:text-primary">Join</a>
+                    <a href="/scores" className="mr-4 hover:text-primary">Scores</a>
+                    <a href="/stats" className="hover:text-primary">Stats</a>
+                </div>
+            </nav>
+        </header>
+         */}
         <main className="min-h-screen flex flex-col">{children}</main>
         <Toaster /> {/* Add Toaster component */}
       </body>

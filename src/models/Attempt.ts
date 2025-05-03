@@ -1,42 +1,45 @@
 import mongoose, { Schema, Document, models, Model } from 'mongoose';
 
-export interface Answer {
+// Interface for standard answers
+export interface StandardAnswer {
   questionIndex: number;
   selectedOptionIndex: number;
   isCorrect: boolean;
   timestamp: Date;
 }
 
+// Updated Attempt interface
 export interface IAttempt extends Document {
-  userName: string;
-  quizSessionId: string; // To associate attempts with a specific quiz session
-  answers: Answer[];
+  quizSessionId: string;
+  answers: StandardAnswer[]; // Renamed for clarity, stores only standard answers
   score: number;
-  feedback: string;
+  bonusAnswerText?: string; // Added field for bonus answer text
   joinedAt: Date;
   lastActivity: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const AnswerSchema: Schema = new Schema({
+// Schema for standard answers
+const StandardAnswerSchema: Schema = new Schema({
   questionIndex: { type: Number, required: true },
   selectedOptionIndex: { type: Number, required: true },
   isCorrect: { type: Boolean, required: true },
   timestamp: { type: Date, default: Date.now }
 });
 
+// Updated Attempt schema
 const AttemptSchema: Schema = new Schema({
-  userName: { type: String, required: true, index: true },
-  quizSessionId: { type: String, required: true, index: true }, // Index for faster querying
-  answers: { type: [AnswerSchema], default: [] },
+  quizSessionId: { type: String, required: true, index: true },
+  answers: { type: [StandardAnswerSchema], default: [] }, // Stores only standard answers
   score: { type: Number, default: 0, required: true },
-  feedback: { type: String, default: '' },
-  joinedAt: { type: Date, default: Date.now, required: true },
+  bonusAnswerText: { type: String, default: null }, // Added field, default to null or empty string
+  joinedAt: { type: Date, required: true },
   lastActivity: { type: Date, default: Date.now, required: true },
-});
+}, { timestamps: true });
 
-// Compound index for efficient user lookup within a session
-AttemptSchema.index({ quizSessionId: 1, userName: 1 });
 
 const Attempt: Model<IAttempt> = models.Attempt || mongoose.model<IAttempt>('Attempt', AttemptSchema);
 
 export default Attempt;
+export type { IAttempt }; // Export the interface type as well

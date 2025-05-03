@@ -1,43 +1,47 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+// import { Input } from '@/components/ui/input'; // No longer needed for name
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Textarea } from '@/components/ui/textarea';
+import { Textarea } from '@/components/ui/textarea'; // For bonus question answer
 import { useToast } from '@/hooks/use-toast';
 import type { Question, QuizStateData, UserInfo } from '@/types';
-import { Loader2, CheckCircle, XCircle, Send } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Send, UserPlus } from 'lucide-react'; // Import icons, though Check/X will be removed from render
 
 const QUIZ_STATE_POLL_INTERVAL = 2000; // Poll quiz state every 2 seconds
+const TOTAL_STANDARD_QUESTIONS = 10;
 
-type QuizStage = 'joining' | 'waiting_start' | 'showing_question' | 'submitted_answer' | 'feedback' | 'finished' | 'error';
+// Updated stages to reflect anonymous join and bonus question
+type QuizStage = 'initial' | 'joining' | 'waiting_start' | 'showing_question' | 'submitted_answer' | 'showing_bonus' | 'submitted_bonus' | 'finished' | 'error';
 
-interface CurrentQuestion extends Omit<Question, 'correctAnswerIndex'> {
- // We don't need correctAnswerIndex on the client for display
- isFeedbackStage?: boolean; // Flag for the feedback question
+interface CurrentQuestionDisplay extends Omit<Question, 'correctAnswerIndex'> {
+ isBonusQuestion?: boolean; // Flag for the bonus question
+ isFinished?: boolean; // Flag if API indicates quiz finished
 }
 
 
 export default function QuizPage() {
-  const [userName, setUserName] = useState('');
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null); // Stores userId, userName, quizSessionId
+  // const [userName, setUserName] = useState(''); // Removed user name state
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null); // Stores userId, quizSessionId
   const [isLoading, setIsLoading] = useState(false);
-  const [stage, setStage] = useState<QuizStage>('joining');
+  const [stage, setStage] = useState<QuizStage>('initial'); // Start at 'initial' stage
   const [quizState, setQuizState] = useState<QuizStateData | null>(null);
-  const [currentQuestion, setCurrentQuestion] = useState<CurrentQuestion | null>(null);
+  const [currentQuestion, setCurrentQuestion] = useState<CurrentQuestionDisplay | null>(null);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const [feedbackText, setFeedbackText] = useState('');
-  const [lastAnswerResult, setLastAnswerResult] = useState<{ isCorrect: boolean } | null>(null);
+  const [bonusAnswerText, setBonusAnswerText] = useState(''); // State for bonus answer input
+  // const [lastAnswerResult, setLastAnswerResult] = useState<{ isCorrect: boolean } | null>(null); // No longer needed visually
   const { toast } = useToast();
 
   const currentQuestionIndexRef = useRef<number>(-1); // Ref to track the last processed question index
 
    // --- Effect for Polling Quiz State ---
    useEffect(() => {
-    if (!userInfo) return; // Don't poll if user hasn't joined
+    // Only poll if user has joined (userInfo is set) AND quiz is not finished/errored out
+    if (!userInfo || stage === 'finished' || stage === 'error') return;
 
     let isActive = true; // Flag to prevent state updates after unmount
     const intervalId = setInterval(async () => {
@@ -46,31 +50,41 @@ export default function QuizPage() {
         const res = await fetch('/api/quiz/state');
         if (!res.ok) {
           console.error(`Failed to fetch quiz state: ${res.status}`);
-           if (res.status === 404) {
-              // Quiz might have ended or session invalid
+           if (res.status === 404 && isActive) {
               setStage('error');
-              toast({ title: 'Error', description: 'Quiz session not found or ended.', variant: 'destructive'});
-              clearInterval(intervalId); // Stop polling on critical error
+              toast({ title: 'Error', description: 'Quiz session not found or ended unexpectedly.', variant: 'destructive'});
+              clearInterval(intervalId);
+           }
+           // Add check for 500 specifically if needed
+            else if (res.status === 500 && isActive) {
+              console.error("Server error (500) fetching quiz state. Check server logs.");
+              toast({ title: 'Server Error', description: 'Could not fetch quiz status. Please check server logs or retry later.', variant: 'destructive'});
+               // Optionally stop polling on persistent 500s, or let it retry
+               // clearInterval(intervalId);
+               // setStage('error');
            }
           return;
         }
         const data: QuizStateData = await res.json();
 
-        if (isActive) { // Check flag before setting state
+        if (isActive) {
             setQuizState(data);
         }
 
       } catch (error) {
         console.error('Polling error:', error);
-         // Maybe show a less intrusive connection error indicator
+        // Add a toast for network errors during polling if needed
+         // if (isActive) {
+         //    toast({ title: 'Network Error', description: 'Could not connect to check quiz status. Retrying...', variant: 'destructive' });
+         // }
       }
     }, QUIZ_STATE_POLL_INTERVAL);
 
      return () => {
-        isActive = false; // Set flag on cleanup
+        isActive = false;
         clearInterval(intervalId);
      };
-  }, [userInfo, toast]); // Depend on userInfo
+  }, [userInfo, stage, toast]); // Depend on userInfo and stage
 
 
   // --- Effect for Handling Quiz State Changes ---
@@ -79,47 +93,61 @@ export default function QuizPage() {
 
     const newIndex = quizState.currentQuestionIndex;
     const isActive = quizState.isQuizActive;
+    const userSessionId = userInfo.quizSessionId;
 
     // Check if the quizSessionId matches the user's session
-    if (quizState.quizSessionId && userInfo.quizSessionId !== quizState.quizSessionId) {
+    if (quizState.quizSessionId && userSessionId !== quizState.quizSessionId) {
         setStage('error');
-        toast({ title: 'Session Mismatch', description: 'You joined a different quiz session. Please rejoin.', variant: 'destructive' });
-        // Reset user info to force rejoin
-        setUserInfo(null);
-        setUserName('');
+        toast({ title: 'Session Mismatch', description: 'You joined a different quiz session than the current one. Please rejoin.', variant: 'destructive' });
+        setUserInfo(null); // Reset user info
         currentQuestionIndexRef.current = -1;
         setQuizState(null);
         setCurrentQuestion(null);
-        setStage('joining');
+        setStage('initial'); // Go back to initial join screen
         return;
     }
 
-
-    // If quiz is not active yet
-    if (!isActive && newIndex === -1 && stage !== 'joining') {
-      setStage('waiting_start');
-      currentQuestionIndexRef.current = -1; // Reset ref
-      return;
-    }
+    // If quiz becomes inactive WHILE user is participating
+     if (!isActive && stage !== 'initial' && stage !== 'joining' && stage !== 'finished' && stage !== 'error') {
+         // Quiz ended by admin or automatically after bonus question was skipped
+          console.log('Quiz became inactive. Moving to finished stage.');
+          setStage('finished');
+          currentQuestionIndexRef.current = newIndex; // Update ref
+          return;
+     }
 
     // If quiz is active and index has changed from the last processed index
      if (isActive && newIndex !== currentQuestionIndexRef.current) {
+       const previousIndex = currentQuestionIndexRef.current;
        currentQuestionIndexRef.current = newIndex; // Update ref immediately
-       setLastAnswerResult(null); // Clear previous answer result
-       setSelectedOption(null); // Reset selection
-       setCurrentQuestion(null); // Clear old question while loading new one
+       // setLastAnswerResult(null); // No longer needed visually
+       setSelectedOption(null); // Reset selection for standard questions
+       setBonusAnswerText(''); // Clear bonus answer text
+       setCurrentQuestion(null); // Clear old question
        setIsLoading(true); // Show loading state
 
-       // Index 0-9: Fetch regular question
-       if (newIndex >= 0 && newIndex < 10) {
-         fetch(`/api/quiz/question?index=${newIndex}&quizSessionId=${userInfo.quizSessionId}`)
+       console.log(`Quiz state changed: Index from ${previousIndex} to ${newIndex}`);
+
+       // Index -1: Waiting to start
+       if (newIndex === -1) {
+         setStage('waiting_start');
+         setIsLoading(false);
+       }
+       // Index 0-9: Fetch standard question
+       else if (newIndex >= 0 && newIndex < TOTAL_STANDARD_QUESTIONS) {
+         console.log(`Fetching standard question ${newIndex}`);
+         fetch(`/api/quiz/question?index=${newIndex}&quizSessionId=${userSessionId}`)
            .then(res => {
                 if (!res.ok) { throw new Error(`Failed to fetch question ${newIndex + 1}`); }
                 return res.json();
             })
-           .then((questionData: CurrentQuestion) => {
-              setCurrentQuestion(questionData);
-              setStage('showing_question');
+           .then((questionData: CurrentQuestionDisplay) => {
+              if (questionData.isFinished) { // Check if API returned finished state
+                   setStage('finished');
+              } else {
+                  setCurrentQuestion(questionData);
+                  setStage('showing_question');
+              }
            })
            .catch(err => {
              console.error(err);
@@ -128,44 +156,57 @@ export default function QuizPage() {
            })
            .finally(() => setIsLoading(false));
        }
-       // Index 10: Go to feedback stage
-       else if (newIndex === 10) {
-          setStage('feedback');
-          setIsLoading(false);
+       // Index 10: Fetch bonus question
+       else if (newIndex === TOTAL_STANDARD_QUESTIONS) {
+          console.log(`Fetching bonus question (index ${newIndex})`);
+          fetch(`/api/quiz/question?index=${newIndex}&quizSessionId=${userSessionId}`)
+             .then(res => {
+                 if (!res.ok) { throw new Error(`Failed to fetch bonus question`); }
+                 return res.json();
+             })
+             .then((questionData: CurrentQuestionDisplay) => {
+                 if (questionData.isFinished) { // Handle case where bonus was skipped and quiz ended
+                      setStage('finished');
+                 } else if (questionData.isBonusQuestion) {
+                     setCurrentQuestion(questionData);
+                     setStage('showing_bonus');
+                 } else {
+                     // Should not happen if API is correct
+                     console.error("Expected bonus question data but got something else:", questionData);
+                     setStage('error');
+                 }
+             })
+             .catch(err => {
+                 console.error(err);
+                 toast({ title: 'Error loading bonus question', description: err.message, variant: 'destructive' });
+                 setStage('error');
+             })
+             .finally(() => setIsLoading(false));
        }
-        // Index > 10 or other unexpected index while active (could mean finished)
-        else if (newIndex > 10) {
+        // Index > 10: Quiz finished state (should normally transition via !isActive)
+        else if (newIndex > TOTAL_STANDARD_QUESTIONS) {
+            console.log(`Index ${newIndex} indicates quiz finished.`);
             setStage('finished');
             setIsLoading(false);
-        } else { // newIndex is -1 but quiz is active (shouldn't normally happen, but handle defensively)
-             setStage('waiting_start'); // Revert to waiting if index goes back to -1 unexpectedly
-             setIsLoading(false);
         }
 
-    } else if (!isActive && newIndex > -1) {
-         // Quiz was active but now is not (likely finished after feedback)
-         setStage('finished');
-         currentQuestionIndexRef.current = newIndex; // Update ref to prevent re-triggering
     }
+     // No change in index, but maybe quiz became inactive? Handled above.
 
   }, [quizState, userInfo, stage, toast]); // Add stage to dependencies
 
 
   // --- Event Handlers ---
 
-  const handleJoinQuiz = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userName.trim()) {
-      toast({ title: 'Please enter your name', variant: 'destructive' });
-      return;
-    }
+  const handleJoinQuiz = async () => {
+    // No name input needed
     setIsLoading(true);
-    setStage('joining'); // Ensure stage is correct during join attempt
+    setStage('joining');
     try {
       const res = await fetch('/api/user/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: userName.trim() }),
+        // No body needed for anonymous join
       });
       const data = await res.json();
 
@@ -173,26 +214,34 @@ export default function QuizPage() {
         throw new Error(data.message || 'Failed to join quiz');
       }
 
-      // data should contain { userId, userName, quizSessionId }
-      setUserInfo({ userId: data.userId, userName: data.userName, quizSessionId: data.quizSessionId });
-      toast({ title: `Welcome, ${data.userName}!` });
+      // data should contain { userId, quizSessionId }
+      setUserInfo({ userId: data.userId, quizSessionId: data.quizSessionId });
+      toast({ title: `Joined Quiz Anonymously!` });
 
-       // Immediately fetch state after joining to determine next stage
+       // Immediately fetch state after joining
        const stateRes = await fetch('/api/quiz/state');
+       if (!stateRes.ok) { throw new Error('Failed to get initial quiz state'); }
        const stateData: QuizStateData = await stateRes.json();
-        setQuizState(stateData); // Set initial state
-        if (!stateData.isQuizActive) {
-            setStage('waiting_start');
-        } else {
-             // If quiz already started, trigger the state change effect
-             currentQuestionIndexRef.current = -2; // Force update by setting ref different from initial state index
-             // The useEffect hook for quizState changes will handle fetching the question
-        }
 
+        // Check if session matches (important if admin restarts quickly)
+       if (stateData.quizSessionId && data.quizSessionId !== stateData.quizSessionId) {
+            toast({ title: 'Quiz Restarted', description: 'The admin started a new quiz while you were joining. Please join again.', variant: 'destructive' });
+            setUserInfo(null);
+            setStage('initial');
+       } else {
+           setQuizState(stateData); // Set initial state
+           if (!stateData.isQuizActive) {
+               setStage('waiting_start');
+           } else {
+               // If quiz already started, trigger the state change effect
+               currentQuestionIndexRef.current = -2; // Force update
+               // Effect will fetch the correct question based on stateData.currentQuestionIndex
+           }
+       }
 
     } catch (error: any) {
       toast({ title: 'Error joining quiz', description: error.message, variant: 'destructive' });
-       setStage('joining'); // Stay in joining stage on error
+       setStage('initial'); // Go back to initial stage on error
     } finally {
       setIsLoading(false);
     }
@@ -200,9 +249,11 @@ export default function QuizPage() {
 
   const handleSubmitAnswer = async () => {
     if (selectedOption === null || !userInfo || !quizState) return;
+     // Only submit standard questions here
+    if (quizState.currentQuestionIndex >= TOTAL_STANDARD_QUESTIONS) return;
 
     setIsLoading(true);
-    setStage('submitted_answer'); // Move to submitted state immediately
+    setStage('submitted_answer');
 
     try {
        const payload = {
@@ -220,40 +271,47 @@ export default function QuizPage() {
        const data = await res.json();
 
       if (!res.ok) {
-        // Handle specific conflict error (already submitted) differently
-        if (res.status === 409) {
-             toast({ title: 'Already Submitted', description: data.message || 'You already answered this question.' });
-             // Optionally show the previous result if available
-             // setLastAnswerResult({ isCorrect: data.isCorrect }); // Assuming API returns previous result
+        if (res.status === 400 && data.message?.includes('rejected')) {
+           // Handle specific rejection for wrong question index
+            toast({ title: 'Submission Rejected', description: data.message, variant: 'destructive' });
+             // Force state refresh to get the correct question
+             currentQuestionIndexRef.current = -2; // Force state change effect
+             await fetch('/api/quiz/state').then(r=>r.json()).then(setQuizState);
         } else {
-            throw new Error(data.message || 'Failed to submit answer');
+             throw new Error(data.message || 'Failed to submit answer');
         }
       } else {
-          // Success
-          setLastAnswerResult({ isCorrect: data.isCorrect }); // Store the result
-          // Toast is shown based on lastAnswerResult below
+          // Success - No need to store result visually anymore
+          // setLastAnswerResult({ isCorrect: data.isCorrect }); // Store the result
+          // toast({ title: "Answer Submitted!" }); // Optionally show a simple toast
       }
 
     } catch (error: any) {
       toast({ title: 'Error submitting answer', description: error.message, variant: 'destructive' });
-      setStage('showing_question'); // Go back to question on error to allow retry? Or show error state?
+      // Don't automatically go back to showing_question, wait for state update
+      // setStage('showing_question'); // Maybe show error state instead?
+       setStage('submitted_answer'); // Stay here, show error via toast
     } finally {
       setIsLoading(false);
-       // Stay in 'submitted_answer' stage until admin moves to next question
+       // Stay in 'submitted_answer' stage
     }
   };
 
-   const handleSubmitFeedback = async () => {
-      if (!feedbackText.trim() || !userInfo || !quizState) return;
+   const handleSubmitBonusAnswer = async () => {
+      if (!userInfo || !quizState || quizState.currentQuestionIndex !== TOTAL_STANDARD_QUESTIONS) return;
+      // No check for empty bonus answer, allow submitting empty
 
       setIsLoading(true);
+      setStage('submitted_bonus'); // Move to submitted bonus state
+
       try {
          const payload = {
             userId: userInfo.userId,
             quizSessionId: userInfo.quizSessionId,
-            feedback: feedbackText.trim(),
+            questionIndex: TOTAL_STANDARD_QUESTIONS, // Explicitly set bonus index
+            bonusAnswerText: bonusAnswerText.trim(),
          };
-         const res = await fetch('/api/quiz/feedback', {
+         const res = await fetch('/api/quiz/submit', { // Use the same submit endpoint
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -262,14 +320,22 @@ export default function QuizPage() {
          const data = await res.json();
 
          if (!res.ok) {
-            throw new Error(data.message || 'Failed to submit feedback');
+              if (res.status === 400 && data.message?.includes('rejected')) {
+                 toast({ title: 'Submission Rejected', description: data.message, variant: 'destructive' });
+                  // Force state refresh
+                  currentQuestionIndexRef.current = -2;
+                  await fetch('/api/quiz/state').then(r=>r.json()).then(setQuizState);
+             } else {
+                  throw new Error(data.message || 'Failed to submit bonus answer');
+             }
+         } else {
+             toast({ title: 'Bonus Answer Submitted!' });
+             // Stay in 'submitted_bonus' stage, waiting for admin to end or state to show finished
          }
 
-         toast({ title: 'Feedback Submitted', description: 'Thank you for your feedback!' });
-         setStage('finished'); // Move to finished stage after feedback
-
       } catch (error: any) {
-         toast({ title: 'Error submitting feedback', description: error.message, variant: 'destructive' });
+         toast({ title: 'Error submitting bonus answer', description: error.message, variant: 'destructive' });
+          setStage('submitted_bonus'); // Stay here, show error via toast
       } finally {
          setIsLoading(false);
       }
@@ -277,59 +343,48 @@ export default function QuizPage() {
 
   // --- Render Functions for Stages ---
 
-  const renderJoining = () => (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle>Join QuizTime Champions</CardTitle>
-        <CardDescription>Enter your name to participate.</CardDescription>
-      </CardHeader>
-      <form onSubmit={handleJoinQuiz}>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Your Name</Label>
-            <Input
-              id="name"
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-              placeholder="e.g., Alex"
-              required
-              disabled={isLoading}
-              maxLength={50} // Add a reasonable length limit
-            />
-          </div>
-        </CardContent>
-        <CardFooter>
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Join Quiz
-          </Button>
-        </CardFooter>
-      </form>
-    </Card>
-  );
+   const renderInitial = () => (
+     <Card className="w-full max-w-md text-center">
+       <CardHeader>
+         <CardTitle>QuizTime Champions</CardTitle>
+         <CardDescription>Ready to test your knowledge?</CardDescription>
+       </CardHeader>
+       <CardContent>
+         <Button onClick={handleJoinQuiz} className="w-full" disabled={isLoading} size="lg">
+           {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2"/>}
+           Join Quiz Now
+         </Button>
+       </CardContent>
+     </Card>
+   );
+
+
+  // renderJoining is implicit now, happens during handleJoinQuiz
 
   const renderWaiting = (message: string) => (
     <Card className="w-full max-w-md text-center">
       <CardHeader>
-        <CardTitle>Welcome, {userInfo?.userName}!</CardTitle>
+        {/* Removed user name */}
+        <CardTitle>Welcome!</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col items-center space-y-4">
          <Loader2 className="h-12 w-12 animate-spin text-primary" />
          <p className="text-lg text-muted-foreground">{message}</p>
-          <p className="text-sm text-muted-foreground">(Polling every {QUIZ_STATE_POLL_INTERVAL / 1000}s for updates)</p>
+          <p className="text-sm text-muted-foreground">(Waiting for updates...)</p>
       </CardContent>
     </Card>
   );
 
    const renderQuestion = () => {
-      if (isLoading || !currentQuestion) {
+      if (isLoading || !currentQuestion || currentQuestion.isBonusQuestion) {
          return renderWaiting("Loading question...");
       }
+      const questionNumber = (quizState?.currentQuestionIndex ?? 0) + 1;
 
       return (
       <Card className="w-full max-w-xl">
         <CardHeader>
-          <CardTitle>Question {quizState!.currentQuestionIndex + 1}</CardTitle>
+          <CardTitle>Question {questionNumber}</CardTitle>
           <CardDescription className="text-lg pt-2">{currentQuestion.questionText}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -361,70 +416,92 @@ export default function QuizPage() {
     );
   };
 
+ // Updated renderSubmittedAnswer: Remove correct/incorrect icons and text
  const renderSubmittedAnswer = () => (
      <Card className="w-full max-w-md text-center">
       <CardHeader>
         <CardTitle>Answer Submitted!</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col items-center space-y-4">
-         {lastAnswerResult ? (
+         {/* Removed icon display */}
+         {/* {lastAnswerResult ? (
               lastAnswerResult.isCorrect ? (
                 <CheckCircle className="h-12 w-12 text-green-500" />
               ) : (
                 <XCircle className="h-12 w-12 text-red-500" />
               )
-            ) : <Loader2 className="h-12 w-12 animate-spin text-primary" /> // Show loader if result not yet received
-         }
-         <p className="text-lg text-muted-foreground">
-             {lastAnswerResult ? (lastAnswerResult.isCorrect ? 'Correct!' : 'Incorrect!') : 'Processing...'}
-         </p>
-         <p className="text-muted-foreground">Waiting for the admin to move to the next question...</p>
+            ) : <Loader2 className="h-12 w-12 animate-spin text-primary" />
+         } */}
+         <p className="text-muted-foreground">Waiting for the next question...</p>
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </CardContent>
     </Card>
  );
 
+  const renderBonusQuestion = () => {
+     if (isLoading || !currentQuestion || !currentQuestion.isBonusQuestion) {
+         return renderWaiting("Loading bonus question...");
+      }
 
- const renderFeedback = () => (
-     <Card className="w-full max-w-xl">
+     return (
+        <Card className="w-full max-w-xl">
+         <CardHeader>
+           <CardTitle>Bonus Question!</CardTitle>
+           <CardDescription className="text-lg pt-2">{currentQuestion.questionText}</CardDescription>
+         </CardHeader>
+         <CardContent className="space-y-4">
+            <Label htmlFor="bonusAnswer">Your Answer</Label>
+            <Textarea
+              id="bonusAnswer"
+              value={bonusAnswerText}
+              onChange={(e) => setBonusAnswerText(e.target.value)}
+              placeholder="Type your answer here..."
+              rows={4}
+              disabled={isLoading}
+            />
+         </CardContent>
+         <CardFooter>
+           <Button
+             className="w-full"
+             onClick={handleSubmitBonusAnswer}
+             disabled={isLoading} // Allow submitting empty answer
+            >
+             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+             Submit Bonus Answer
+           </Button>
+         </CardFooter>
+       </Card>
+     );
+  };
+
+ const renderSubmittedBonus = () => (
+     <Card className="w-full max-w-md text-center">
       <CardHeader>
-        <CardTitle>Quiz Complete!</CardTitle>
-        <CardDescription>Please provide your feedback on the quiz.</CardDescription>
+        <CardTitle>Bonus Answer Submitted!</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-         <Label htmlFor="feedback">Your Feedback (Optional)</Label>
-         <Textarea
-           id="feedback"
-           value={feedbackText}
-           onChange={(e) => setFeedbackText(e.target.value)}
-           placeholder="How was the quiz? Any suggestions?"
-           rows={4}
-           disabled={isLoading}
-         />
+      <CardContent className="flex flex-col items-center space-y-4">
+         <CheckCircle className="h-12 w-12 text-primary" />
+         <p className="text-muted-foreground">Waiting for the quiz to end...</p>
+         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </CardContent>
-      <CardFooter>
-        <Button
-          className="w-full"
-          onClick={handleSubmitFeedback}
-          disabled={isLoading || !feedbackText.trim()} // Disable if no text or loading
-         >
-          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-          Submit Feedback
-        </Button>
-      </CardFooter>
     </Card>
  );
+
 
   const renderFinished = () => (
     <Card className="w-full max-w-md text-center">
       <CardHeader>
         <CardTitle>Quiz Finished!</CardTitle>
-        <CardDescription>Thanks for playing, {userInfo?.userName}.</CardDescription>
+        {/* Removed user name */}
+        <CardDescription>Thanks for playing.</CardDescription>
       </CardHeader>
-      <CardContent>
-         <p className="text-lg mb-4">You can view the final scores on the leaderboard.</p>
-         <Button onClick={() => window.location.href = '/scores'} variant="default">View Leaderboard</Button>
-          <Button onClick={() => window.location.reload()} variant="outline" className="ml-4">Play Again?</Button>
+      <CardContent className="flex flex-col space-y-4">
+         <p className="text-lg mb-4">Check out the final scores and stats!</p>
+         <div className="flex justify-center gap-4">
+             <Button onClick={() => window.location.href = '/scores'} variant="default">View Leaderboard</Button>
+             <Button onClick={() => window.location.href = '/stats'} variant="secondary">View Stats</Button>
+         </div>
+         <Button onClick={() => window.location.reload()} variant="outline" className="mt-4">Play Again?</Button>
       </CardContent>
     </Card>
   );
@@ -434,16 +511,14 @@ export default function QuizPage() {
       <CardHeader>
         <CardTitle className="text-destructive">An Error Occurred</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col items-center space-y-4">
          <p className="text-destructive-foreground bg-destructive p-3 rounded-md mb-4">
-             {quizState?.quizSessionId && userInfo?.quizSessionId !== quizState?.quizSessionId
-                ? 'You seem to be in the wrong quiz session. Please rejoin.'
-                : 'Something went wrong. Please try refreshing the page or rejoining the quiz.'}
+             {userInfo?.quizSessionId && quizState?.quizSessionId && userInfo.quizSessionId !== quizState.quizSessionId
+                ? 'You seem to be in the wrong quiz session. Please join again.'
+                : 'Something went wrong. Please try refreshing or joining again.'}
          </p>
          <Button onClick={() => window.location.reload()} variant="destructive">Refresh Page</Button>
-         {quizState?.quizSessionId && userInfo?.quizSessionId !== quizState?.quizSessionId && (
-             <Button onClick={() => { setUserInfo(null); setUserName(''); setStage('joining'); }} variant="outline" className="ml-4">Rejoin Quiz</Button>
-         )}
+         <Button onClick={() => { setUserInfo(null); setStage('initial'); }} variant="outline" className="ml-4">Join Again</Button>
       </CardContent>
     </Card>
   );
@@ -452,22 +527,26 @@ export default function QuizPage() {
   // --- Main Render Switch ---
   const renderCurrentStage = () => {
     switch (stage) {
-      case 'joining':
-        return renderJoining();
+      case 'initial':
+           return renderInitial();
+      case 'joining': // Show loading while joining
+           return renderWaiting("Joining quiz...");
       case 'waiting_start':
         return renderWaiting('Waiting for the Admin to start the quiz...');
       case 'showing_question':
         return renderQuestion();
       case 'submitted_answer':
          return renderSubmittedAnswer();
-      case 'feedback':
-        return renderFeedback();
+      case 'showing_bonus':
+         return renderBonusQuestion();
+      case 'submitted_bonus':
+         return renderSubmittedBonus();
       case 'finished':
          return renderFinished();
        case 'error':
           return renderError();
       default:
-        return renderJoining(); // Default to joining stage
+        return renderInitial(); // Default to initial join screen
     }
   };
 

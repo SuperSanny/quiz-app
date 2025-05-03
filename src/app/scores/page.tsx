@@ -1,10 +1,11 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Trophy, Medal, Award } from 'lucide-react'; // Icons for ranks
+import { Trophy, Medal, Award, User } from 'lucide-react'; // Added User icon
 import type { ScoreData } from '@/types';
 
 const SCORE_POLL_INTERVAL = 1000; // Poll scores every 1 second
@@ -34,12 +35,11 @@ export default function ScoresPage() {
       } catch (err: any) {
         console.error('Error fetching scores:', err);
          if (isActive) {
-            // Avoid flooding with errors, maybe show a persistent error message
             setError('Could not load scores. Retrying...');
          }
       } finally {
          if (isActive) {
-            setIsLoading(false); // Set loading to false after first attempt (success or fail)
+            setIsLoading(false);
          }
       }
     };
@@ -48,16 +48,16 @@ export default function ScoresPage() {
     const intervalId = setInterval(fetchScores, SCORE_POLL_INTERVAL);
 
     return () => {
-      isActive = false; // Set flag on cleanup
+      isActive = false;
       clearInterval(intervalId);
     };
-  }, []); // Empty dependency array means this runs once on mount and cleans up on unmount
+  }, []); // Empty dependency array
 
   const getRankIcon = (rank: number | undefined) => {
     if (rank === 1) return <Trophy className="h-5 w-5 text-yellow-500 inline-block mr-1" />;
     if (rank === 2) return <Medal className="h-5 w-5 text-gray-400 inline-block mr-1" />;
     if (rank === 3) return <Award className="h-5 w-5 text-orange-400 inline-block mr-1" />;
-    return <span className="inline-block w-5 mr-1 text-center">{rank || '-'}</span>; // Display rank number or '-'
+    return <span className="inline-block w-5 mr-1 text-center font-mono">{rank || '-'}</span>;
   };
 
    const renderSkeletons = (count = 5) => (
@@ -70,13 +70,19 @@ export default function ScoresPage() {
         ))
     );
 
+    // Function to partially anonymize userId
+    const anonymizeUserId = (userId: string) => {
+        if (!userId || userId.length < 6) return 'User ???'; // Handle short/invalid IDs
+        return `User ${userId.substring(0, 3)}...${userId.substring(userId.length - 3)}`;
+    };
+
   return (
     <div className="container mx-auto p-4 py-8">
       <Card className="max-w-2xl mx-auto shadow-lg">
         <CardHeader className="text-center">
           <CardTitle className="text-3xl font-bold text-primary">Leaderboard</CardTitle>
           <CardDescription>
-            Live scores from the current quiz session. Updates automatically.
+            Live scores from the current quiz session. Participants are anonymous.
             {lastUpdated && (
                  <span className="block text-xs text-muted-foreground mt-1">
                      Last updated: {lastUpdated.toLocaleTimeString()}
@@ -90,7 +96,7 @@ export default function ScoresPage() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-16">Rank</TableHead>
-                <TableHead>Name</TableHead>
+                <TableHead>Participant</TableHead>
                 <TableHead className="text-right">Score</TableHead>
               </TableRow>
             </TableHeader>
@@ -105,7 +111,7 @@ export default function ScoresPage() {
                  </TableRow>
                ) : (
                 scores.map((scoreData) => (
-                  <TableRow key={scoreData.userName} className={
+                  <TableRow key={scoreData.userId} className={ // Use userId as key
                     `
                     ${scoreData.rank === 1 ? 'bg-yellow-100/50 dark:bg-yellow-900/30 font-semibold' : ''}
                     ${scoreData.rank === 2 ? 'bg-gray-100/50 dark:bg-gray-800/30' : ''}
@@ -115,7 +121,10 @@ export default function ScoresPage() {
                     <TableCell className="w-16 font-medium">
                       {getRankIcon(scoreData.rank)}
                     </TableCell>
-                    <TableCell>{scoreData.userName}</TableCell>
+                    <TableCell className="flex items-center">
+                        <User className="h-4 w-4 mr-2 text-muted-foreground" />
+                        {anonymizeUserId(scoreData.userId)}
+                    </TableCell>
                     <TableCell className="text-right font-semibold">{scoreData.score}</TableCell>
                   </TableRow>
                 ))
@@ -131,6 +140,12 @@ export default function ScoresPage() {
           </Table>
         </CardContent>
       </Card>
+       {/* Add Link to Stats Page */}
+       <div className="text-center mt-4">
+          <a href="/stats" className="text-sm text-primary hover:underline">
+            View Question Stats
+          </a>
+        </div>
     </div>
   );
 }

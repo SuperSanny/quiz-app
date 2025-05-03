@@ -24,12 +24,12 @@ export async function GET(request: NextRequest) {
     const quizSessionId = currentQuizState.quizSessionId;
 
 
-    // Fetch attempts only for the current active quiz session, selecting only necessary fields
+    // Fetch attempts only for the current active quiz session
     const attempts = await Attempt.find(
         { quizSessionId: quizSessionId }, // Filter by active session ID
-        { userName: 1, score: 1, _id: 0 } // Projection: only get userName and score
+        { _id: 1, score: 1, lastActivity: 1 } // Projection: get _id (userId), score, and lastActivity for tie-breaking
       )
-      .sort({ score: -1, lastActivity: 1 }); // Sort by score descending, then by activity ascending (earlier activity breaks ties)
+      .sort({ score: -1, lastActivity: 1 }); // Sort by score descending, then by activity ascending
 
 
     // Add ranking logic
@@ -37,18 +37,17 @@ export async function GET(request: NextRequest) {
     let lastScore = Infinity;
     let usersAtRank = 0;
 
-    const rankedScores: ScoreData[] = attempts.map((attempt, index) => {
+    const rankedScores: ScoreData[] = attempts.map((attempt) => {
         if (attempt.score < lastScore) {
-            rank += usersAtRank; // Add the count of users at the previous rank
-            rank++; // Increment rank for the new score level
+            rank += usersAtRank;
+            rank++;
             lastScore = attempt.score;
-            usersAtRank = 1; // Reset count for the new rank
+            usersAtRank = 1;
         } else {
-            // Same score as the previous user, same rank
             usersAtRank++;
         }
         return {
-            userName: attempt.userName,
+            userId: attempt._id.toString(), // Return userId (_id as string)
             score: attempt.score,
             rank: rank,
         };

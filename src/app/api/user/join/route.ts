@@ -7,123 +7,84 @@ import { IAttempt } from '@/models/Attempt';
 import mongoose from 'mongoose';
 
 export async function POST(request: Request) {
-  let name = ''; // Initialize name to handle potential errors during JSON parsing
+  let quizSessionId: string | null = null; // Initialize quizSessionId
+  console.log('--- Anonymous User Join Request Received ---');
   try {
-    const body = await request.json();
-    name = body.name;
 
-    if (!name || typeof name !== 'string' || name.trim().length === 0) {
-      return NextResponse.json({ message: 'Name is required and must be a non-empty string' }, { status: 400 });
-    }
-
-    const trimmedName = name.trim();
-     if (trimmedName.length > 50) { // Add length validation
-       return NextResponse.json({ message: 'Name cannot exceed 50 characters' }, { status: 400 });
-     }
-
+    // No need to parse name from body anymore
 
     // 1. Database Connection
     try {
         await dbConnect();
-        console.log(`User Join [${trimmedName}]: DB connected.`);
+        console.log(`Anonymous Join: DB connected.`);
     } catch (dbError) {
-        console.error(`User Join [${trimmedName}]: DB connection error:`, dbError);
+        console.error(`Anonymous Join: DB connection error:`, dbError);
         return NextResponse.json({ message: 'Internal Server Error: Database connection failed' }, { status: 500 });
     }
 
     // 2. Find the *current* active quiz session
     let currentQuizState;
     try {
+        console.log(`Anonymous Join: Searching for active quiz session...`);
         currentQuizState = await QuizState.findOne({ isQuizActive: true }).sort({ createdAt: -1 });
     } catch (findStateError) {
-        console.error(`User Join [${trimmedName}]: Error finding active quiz state:`, findStateError);
+        console.error(`Anonymous Join: Error finding active quiz state:`, findStateError);
         return NextResponse.json({ message: 'Internal Server Error: Could not retrieve quiz status' }, { status: 500 });
     }
 
     if (!currentQuizState) {
-      console.log(`User Join [${trimmedName}]: No active quiz found.`);
+      console.log(`Anonymous Join: No active quiz session found. Informing user.`);
       return NextResponse.json({ message: 'No active quiz found. Please wait for the admin to start.' }, { status: 404 });
     }
 
-    const quizSessionId = currentQuizState.quizSessionId;
-    console.log(`User Join [${trimmedName}]: Joining active session ${quizSessionId}`);
+    quizSessionId = currentQuizState.quizSessionId;
+    console.log(`Anonymous Join: Found active session ${quizSessionId}. Creating new anonymous user attempt.`);
 
-    // 3. Find or Create User Attempt for this specific session
-    let userAttempt: IAttempt | null = null;
+    // 3. Create a *new* anonymous User Attempt for this specific session
+    let newUserAttempt: IAttempt | null = null;
     try {
-        // Use findOneAndUpdate with upsert:true to atomically find or create the user attempt
-        userAttempt = await Attempt.findOneAndUpdate(
-            { userName: trimmedName, quizSessionId: quizSessionId }, // Filter
-            {
-                $setOnInsert: { // Fields to set only if a new document is created (upserted)
-                    userName: trimmedName,
-                    quizSessionId: quizSessionId,
-                    answers: [],
-                    score: 0,
-                    feedback: '',
-                    joinedAt: new Date(),
-                },
-                $set: { // Fields to update regardless (e.g., update last activity on rejoin)
-                    lastActivity: new Date()
-                }
-            },
-            {
-                new: true, // Return the modified document (or the new one if created)
-                upsert: true, // Create the document if it doesn't exist
-                runValidators: true, // Ensure schema validation runs on upsert
-            }
-        );
+        console.log(`Anonymous Join [Session: ${quizSessionId}]: Creating new Attempt document...`);
+        const now = new Date();
+        newUserAttempt = new Attempt({
+            // userName is removed
+            quizSessionId: quizSessionId,
+            answers: [],
+            score: 0,
+            // feedback is removed
+            joinedAt: now,
+            lastActivity: now
+        });
 
-        if (!userAttempt) {
-            // This should theoretically not happen with upsert: true unless there's a severe db issue
-            console.error(`User Join [${trimmedName}, Session: ${quizSessionId}]: Failed to find or create user attempt despite using upsert.`);
+        await newUserAttempt.save(); // Save the new document
+
+        if (!newUserAttempt) {
+            console.error(`Anonymous Join [Session: ${quizSessionId}]: CRITICAL - Failed to save new anonymous user attempt.`);
             return NextResponse.json({ message: 'Internal Server Error: Failed to register user.' }, { status: 500 });
         }
 
-        console.log(`User Join [${trimmedName}, Session: ${quizSessionId}]: User registered/found with ID: ${userAttempt._id}.`);
+        console.log(`Anonymous Join [Session: ${quizSessionId}]: Anonymous user created with ID: ${newUserAttempt._id}.`);
 
-
-        // 4. Return user details
+        // 4. Return user details (only userId and session ID)
         return NextResponse.json({
-            userId: userAttempt._id.toString(), // Convert ObjectId to string
-            userName: userAttempt.userName,
-            quizSessionId: userAttempt.quizSessionId,
-        }, { status: userAttempt.createdAt.getTime() === userAttempt.updatedAt.getTime() ? 201 : 200 }); // 201 if created, 200 if updated
+            userId: newUserAttempt._id.toString(), // Convert ObjectId to string
+            quizSessionId: newUserAttempt.quizSessionId,
+        }, { status: 201 }); // 201 Created
 
     } catch (error) {
-         console.error(`User Join [${trimmedName}, Session: ${quizSessionId}]: Error finding/creating attempt:`, error);
+         console.error(`Anonymous Join [Session: ${quizSessionId}]: Error during Attempt creation/save:`, error);
          if (error instanceof mongoose.Error.ValidationError) {
-            console.error(`User Join [${trimmedName}, Session: ${quizSessionId}]: Validation Error:`, error.message);
+            console.error(`Anonymous Join [Session: ${quizSessionId}]: Validation Error:`, error.message);
             return NextResponse.json({ message: `Validation Error: ${error.message}` }, { status: 400 });
          }
-         // Check for potential duplicate key error if index isn't working as expected (though upsert handles this case)
-         if ((error as any).code === 11000) {
-             console.error(`User Join [${trimmedName}, Session: ${quizSessionId}]: Duplicate key error (should be handled by upsert):`, error);
-             // Attempt to fetch the existing user again as a fallback
-             try {
-                const existingUser = await Attempt.findOne({ userName: trimmedName, quizSessionId: quizSessionId });
-                if (existingUser) {
-                     return NextResponse.json({
-                        userId: existingUser._id.toString(),
-                        userName: existingUser.userName,
-                        quizSessionId: existingUser.quizSessionId,
-                    }, { status: 200 });
-                }
-             } catch (fallbackError) {
-                 console.error(`User Join [${trimmedName}, Session: ${quizSessionId}]: Fallback fetch error after duplicate key:`, fallbackError);
-             }
-             return NextResponse.json({ message: 'Error processing registration, possibly duplicate entry.' }, { status: 409 }); // Conflict
-         }
          return NextResponse.json({ message: 'Internal Server Error during registration.' }, { status: 500 });
+    } finally {
+        console.log('--- Anonymous User Join Request Finished ---');
     }
 
   } catch (error) {
-    // Handle errors in request parsing or initial validation
-    console.error(`User Join [${name || 'unknown'}]: Error processing join request:`, error);
-    if (error instanceof SyntaxError) {
-        return NextResponse.json({ message: 'Invalid request format' }, { status: 400 });
-    }
-    return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
+    // Handle errors in request processing (e.g., DB connection issues before finding session)
+    console.error(`Anonymous Join [Session: ${quizSessionId || 'unknown'}]: Top-level error processing join request:`, error);
+    // No JSON parsing error expected here anymore
+    return NextResponse.json({ message: 'Internal Server Error processing request' }, { status: 500 });
   }
 }
-```

@@ -6,11 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea'; // Import Textarea
 import { useToast } from '@/hooks/use-toast';
 import type { QuizStateData } from '@/types';
-import { Loader2, Play, SkipForward, PowerOff } from 'lucide-react'; // Added PowerOff
+import { Loader2, Play, SkipForward, PowerOff, AlertTriangle, HelpCircle } from 'lucide-react'; // Added HelpCircle
 
 const POLLING_INTERVAL = 3000; // Poll quiz state every 3 seconds
+const TOTAL_STANDARD_QUESTIONS = 10; // Number of standard questions
 
 export default function AdminPage() {
   const [password, setPassword] = useState('');
@@ -18,6 +20,7 @@ export default function AdminPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<'start' | 'next' | 'end' | null>(null); // Track which action is loading
   const [quizState, setQuizState] = useState<QuizStateData | null>(null);
+  const [bonusQuestionText, setBonusQuestionText] = useState(''); // State for bonus question
   const { toast } = useToast();
 
   // --- Fetch Quiz State Periodically ---
@@ -60,16 +63,14 @@ export default function AdminPage() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true); // Use general isLoading for login
-    // IMPORTANT: NEVER use NEXT_PUBLIC_ for sensitive data like passwords.
-    // This example is simplified. In production, always verify on the backend.
-    // fetch('/api/admin/login', { method: 'POST', body: JSON.stringify({ password }) })...
-    const expectedPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'password'; // Using NEXT_PUBLIC_ only for demo simplicity
+
+    const expectedPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'password'; // **INSECURE - FOR LOCAL DEMO ONLY**
 
     if (password === expectedPassword) {
-      setIsAuthenticated(true);
-      toast({ title: 'Authentication successful' });
+        setIsAuthenticated(true);
+        toast({ title: 'Password accepted (Client-side check). Actions will verify on backend.' });
     } else {
-      toast({ title: 'Authentication failed', variant: 'destructive' });
+      toast({ title: 'Authentication failed (Client-side check)', variant: 'destructive' });
       setPassword(''); // Clear password field
     }
     setIsLoading(false);
@@ -79,20 +80,25 @@ export default function AdminPage() {
    const handleAdminAction = async (action: 'start' | 'next' | 'end') => {
     setActionLoading(action); // Set loading specific to this action
     try {
+        let payload: any = {};
+        if (action === 'start') {
+            payload = { bonusQuestionText: bonusQuestionText.trim() };
+        }
+
       const res = await fetch(`/api/admin/${action}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${password}`, // Send password for verification
+          'Authorization': `Bearer ${password}`,
         },
+        body: action === 'start' ? JSON.stringify(payload) : undefined, // Add body only for start
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        // Handle specific error statuses if needed
          if (res.status === 401) {
-              toast({ title: 'Authentication Failed', description: 'Your admin password might be incorrect or expired.', variant: 'destructive' });
+              toast({ title: 'Authentication Failed (Backend)', description: 'Your admin password might be incorrect or expired.', variant: 'destructive' });
                setIsAuthenticated(false); // Force re-login on auth failure
                return; // Stop further processing
          }
@@ -105,15 +111,14 @@ export default function AdminPage() {
       switch (action) {
           case 'start':
               toastTitle = 'Quiz Started!';
-              toastDescription = `Session ID: ${data.quizSessionId}`;
-              // Manually update local state immediately for better UX
+              toastDescription = `Session ID: ${data.quizSessionId}. Bonus Question: ${bonusQuestionText.trim() ? 'Included' : 'Skipped'}`;
               setQuizState({ isQuizActive: true, currentQuestionIndex: 0, quizSessionId: data.quizSessionId });
               break;
           case 'next':
               toastTitle = 'Question Advanced';
-               // Calculate the display question number (index + 1), or 'Feedback'
-                const displayNum = data.newIndex < 10 ? data.newIndex + 1 : 'Feedback';
-              toastDescription = `Moved to ${displayNum}`;
+              // Check if advancing TO the bonus question stage
+              const nextIndexDisplay = data.newIndex === TOTAL_STANDARD_QUESTIONS ? 'Bonus Question' : `Question ${data.newIndex + 1}`;
+              toastDescription = `Moved to ${nextIndexDisplay}`;
               if (quizState) {
                   setQuizState({ ...quizState, currentQuestionIndex: data.newIndex });
               }
@@ -126,6 +131,7 @@ export default function AdminPage() {
               } else {
                    setQuizState({ isQuizActive: false, currentQuestionIndex: -1 }); // Default if no prior state
               }
+              setBonusQuestionText(''); // Clear bonus question text on end
               break;
       }
 
@@ -135,8 +141,6 @@ export default function AdminPage() {
     } catch (error: any) {
        console.error(`Error performing admin action (${action}):`, error);
       toast({ title: `Error ${action === 'start' ? 'starting' : action === 'next' ? 'advancing' : 'ending'} quiz`, description: error.message, variant: 'destructive' });
-      // Optionally re-fetch state on error to ensure consistency, but polling might cover this
-       // fetch('/api/quiz/state').then(res => res.json()).then(setQuizState).catch(console.error);
     } finally {
       setActionLoading(null); // Clear loading state for this action
     }
@@ -152,6 +156,15 @@ export default function AdminPage() {
           <CardHeader>
             <CardTitle>Admin Login</CardTitle>
             <CardDescription>Enter the admin password to access the control panel.</CardDescription>
+            <div className="mt-4 p-3 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 dark:bg-yellow-900/30 dark:border-yellow-600 dark:text-yellow-300">
+                <div className="flex items-center">
+                    <AlertTriangle className="h-5 w-5 mr-2"/>
+                    <p className="font-bold">Security Notice</p>
+                </div>
+                <p className="text-sm mt-1">
+                    For local demo, the password check is basic. In production, ensure `ADMIN_PASSWORD` is set securely on the server, not exposed publicly.
+                </p>
+            </div>
           </CardHeader>
           <form onSubmit={handleLogin}>
             <CardContent className="space-y-4">
@@ -182,32 +195,31 @@ export default function AdminPage() {
    // Determine button states based on quizState
    const isBusy = !!actionLoading; // True if any action is loading
    const canStart = !isBusy && !quizState?.isQuizActive;
-   const canAdvance = !isBusy && quizState?.isQuizActive && quizState.currentQuestionIndex >= 0 && quizState.currentQuestionIndex < 10; // Assumes 10 questions (0-9), index 10 is feedback
+   // Can advance if active, index is valid (0 to TOTAL_STANDARD_QUESTIONS inclusive for bonus)
+   const canAdvance = !isBusy && quizState?.isQuizActive && quizState.currentQuestionIndex >= 0 && quizState.currentQuestionIndex < TOTAL_STANDARD_QUESTIONS;
    const canEnd = !isBusy && quizState?.isQuizActive;
 
    // Refined Status Messages
     let statusMessage = "Loading quiz state...";
     let currentStepDisplay = "";
     if (quizState) {
+        const currentIndex = quizState.currentQuestionIndex;
         if (quizState.isQuizActive) {
             statusMessage = "Quiz active.";
-            const totalQuestions = 10; // Assuming 10 questions
-            const currentIndex = quizState.currentQuestionIndex;
-            if (currentIndex >= 0 && currentIndex < totalQuestions) {
-                currentStepDisplay = `Question ${currentIndex + 1} of ${totalQuestions}`;
-            } else if (currentIndex === totalQuestions) {
-                currentStepDisplay = "Feedback Stage";
+            if (currentIndex >= 0 && currentIndex < TOTAL_STANDARD_QUESTIONS) {
+                currentStepDisplay = `Question ${currentIndex + 1} of ${TOTAL_STANDARD_QUESTIONS}`;
+            } else if (currentIndex === TOTAL_STANDARD_QUESTIONS) {
+                currentStepDisplay = "Bonus Question Stage";
             } else if (currentIndex === -1) {
-                 // This case should ideally not happen if quiz is active, but handle defensively
-                 statusMessage = "Quiz active, but waiting for first question (Index: -1). Press Next Question.";
+                 statusMessage = "Quiz active, but waiting for first question. Press Start Quiz.";
                  currentStepDisplay = "Pre-Start";
             }
-             else {
-                statusMessage = `Quiz active. Unexpected state (Index: ${currentIndex}).`;
+             else { // Index > TOTAL_STANDARD_QUESTIONS (should not happen if 'next' logic is correct)
+                statusMessage = `Quiz active, but in unexpected state (Index: ${currentIndex}). Consider ending quiz.`;
             }
         } else {
             // Quiz is not active
-            if (quizState.currentQuestionIndex === -1 && !quizState.quizSessionId) {
+            if (currentIndex === -1 && !quizState.quizSessionId) {
                  statusMessage = "No quiz has been started yet.";
             } else if (quizState.quizSessionId) {
                  statusMessage = `Quiz finished or not started. Last Session ID: ${quizState.quizSessionId}.`;
@@ -230,6 +242,24 @@ export default function AdminPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col space-y-4">
+          {/* Bonus Question Input (Visible when quiz is inactive) */}
+           {!quizState?.isQuizActive && (
+              <div className="space-y-2">
+                  <Label htmlFor="bonusQuestion" className="flex items-center">
+                       <HelpCircle className="mr-2 h-4 w-4 text-muted-foreground"/>
+                       Optional Bonus Question
+                  </Label>
+                  <Textarea
+                      id="bonusQuestion"
+                      placeholder="Enter a bonus question text here (shown after standard questions). Leave blank to skip."
+                      value={bonusQuestionText}
+                      onChange={(e) => setBonusQuestionText(e.target.value)}
+                      rows={3}
+                      disabled={isBusy}
+                  />
+              </div>
+            )}
+
           {/* Start Quiz Button */}
           <Button
             onClick={() => handleAdminAction('start')}
@@ -248,10 +278,9 @@ export default function AdminPage() {
             disabled={!canAdvance}
             variant="accent"
             size="lg"
-            // className="bg-accent hover:bg-yellow-500 text-accent-foreground" // Already defined in globals?
           >
             {actionLoading === 'next' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SkipForward className="mr-2" />}
-             {quizState?.currentQuestionIndex === 9 ? "Go to Feedback" : "Next Question"}
+             {quizState?.currentQuestionIndex === TOTAL_STANDARD_QUESTIONS - 1 ? "Go to Bonus Question" : "Next Question"}
           </Button>
 
            {/* End Quiz Button */}
@@ -269,8 +298,8 @@ export default function AdminPage() {
         </CardContent>
          <CardFooter>
              <p className="text-xs text-muted-foreground">
-                 Use this panel to control the flow of the quiz for all participants.
-                 Quiz state updates automatically every {POLLING_INTERVAL / 1000} seconds. Ending a quiz makes it inactive.
+                 Control the quiz flow. Bonus question is shown after question {TOTAL_STANDARD_QUESTIONS}.
+                 Ending the quiz makes it inactive. State updates every {POLLING_INTERVAL / 1000}s.
              </p>
          </CardFooter>
       </Card>
