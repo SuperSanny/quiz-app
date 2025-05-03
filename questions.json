@@ -1,0 +1,92 @@
+[
+  {
+    "id": "q1",
+    "questionText": "What is the capital of France?",
+    "options": ["Berlin", "Madrid", "Paris", "Rome"],
+    "correctAnswerIndex": 2
+  },
+  {
+    "id": "q2",
+    "questionText": "Which planet is known as the Red Planet?",
+    "options": ["Earth", "Mars", "Jupiter", "Saturn"],
+    "correctAnswerIndex": 1
+  },
+  {
+    "id": "q3",
+    "questionText": "What is the largest ocean on Earth?",
+    "options": ["Atlantic Ocean", "Indian Ocean", "Arctic Ocean", "Pacific Ocean"],
+    "correctAnswerIndex": 3
+  },
+  {
+    "id": "q4",
+    "questionText": "What is the chemical symbol for water?",
+    "options": ["O2", "H2O", "CO2", "NaCl"],
+    "correctAnswerIndex": 1
+  },
+  {
+    "id": "q5",
+    "questionText": "Who wrote 'Hamlet'?",
+    "options": ["Charles Dickens", "William Shakespeare", "Leo Tolstoy", "Mark Twain"],
+    "correctAnswerIndex": 1
+  },
+  {
+    "id": "q6",
+    "questionText": "What is the tallest mountain in the world?",
+    "options": ["K2", "Kangchenjunga", "Makalu", "Mount Everest"],
+    "correctAnswerIndex": 3
+  },
+  {
+    "id": "q7",
+    "questionText": "What is the primary gas found in the Earth's atmosphere?",
+    "options": ["Oxygen", "Carbon Dioxide", "Nitrogen", "Hydrogen"],
+    "correctAnswerIndex": 2
+  },
+  {
+    "id": "q8",
+    "questionText": "In which year did the Titanic sink?",
+    "options": ["1905", "1912", "1918", "1923"],
+    "correctAnswerIndex": 1
+  },
+  {
+    "id": "q9",
+    "questionText": "What is the currency of Japan?",
+    "options": ["Won", "Yuan", "Yen", "Dollar"],
+    "correctAnswerIndex": 2
+  },
+  {
+    "id": "q10",
+    "questionText": "Which element has the atomic number 1?",
+    "options": ["Helium", "Oxygen", "Hydrogen", "Carbon"],
+    "correctAnswerIndex": 2
+  },
+   {
+    "id": "q11",
+    "questionText": "What is the square root of 144?",
+    "options": ["10", "11", "12", "13"],
+    "correctAnswerIndex": 2
+  },
+  {
+    "id": "q12",
+    "questionText": "Who painted the Mona Lisa?",
+    "options": ["Vincent van Gogh", "Pablo Picasso", "Leonardo da Vinci", "Claude Monet"],
+    "correctAnswerIndex": 2
+  },
+  {
+    "id": "q13",
+    "questionText": "What does CPU stand for?",
+    "options": ["Central Processing Unit", "Computer Personal Unit", "Central Process Unit", "Control Processing Unit"],
+    "correctAnswerIndex": 0
+  },
+   {
+    "id": "q14",
+    "questionText": "Which country is the largest by area?",
+    "options": ["China", "USA", "Canada", "Russia"],
+    "correctAnswerIndex": 3
+  },
+  {
+    "id": "q15",
+    "questionText": "What is the boiling point of water in Celsius?",
+    "options": ["90°C", "100°C", "110°C", "120°C"],
+    "correctAnswerIndex": 1
+  }
+]
