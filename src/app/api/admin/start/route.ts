@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     }
 
 
-    await dbConnect();
+    const mongoconnect = await dbConnect();
 
     // --- Optional: Clean up old quiz states or attempts ---
     // Deactivate any previous active quizzes
