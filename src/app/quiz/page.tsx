@@ -145,7 +145,7 @@ export default function QuizPage() {
       stage !== "error"
     ) {
       // Quiz ended by admin or automatically after bonus question was skipped
-      console.log("Quiz became inactive. Moving to finished stage.");
+      // console.log("Quiz became inactive. Moving to finished stage.");
       setStage("finished");
       currentQuestionIndexRef.current = newIndex; // Update ref
       return;
@@ -161,9 +161,9 @@ export default function QuizPage() {
       setCurrentQuestion(null); // Clear old question
       setIsLoading(true); // Show loading state
 
-      console.log(
-        `Quiz state changed: Index from ${previousIndex} to ${newIndex}`
-      );
+      // console.log(
+      //   `Quiz state changed: Index from ${previousIndex} to ${newIndex}`
+      // );
 
       // Index -1: Waiting to start
       if (newIndex === -1) {
@@ -172,7 +172,7 @@ export default function QuizPage() {
       }
       // Index 0-9: Fetch standard question
       else if (newIndex >= 0 && newIndex < TOTAL_STANDARD_QUESTIONS) {
-        console.log(`Fetching standard question ${newIndex}`);
+        // console.log(`Fetching standard question ${newIndex}`);
         fetch(
           `/api/quiz/question?index=${newIndex}&quizSessionId=${userSessionId}`
         )
@@ -204,7 +204,7 @@ export default function QuizPage() {
       }
       // Index 10: Fetch bonus question
       else if (newIndex === TOTAL_STANDARD_QUESTIONS) {
-        console.log(`Fetching bonus question (index ${newIndex})`);
+        // console.log(`Fetching bonus question (index ${newIndex})`);
         fetch(
           `/api/quiz/question?index=${newIndex}&quizSessionId=${userSessionId}`
         )
@@ -243,7 +243,7 @@ export default function QuizPage() {
       }
       // Index > 10: Quiz finished state (should normally transition via !isActive)
       else if (newIndex > TOTAL_STANDARD_QUESTIONS) {
-        console.log(`Index ${newIndex} indicates quiz finished.`);
+        // console.log(`Index ${newIndex} indicates quiz finished.`);
         setStage("finished");
         setIsLoading(false);
       }

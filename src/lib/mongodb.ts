@@ -7,8 +7,6 @@ import mongoose from 'mongoose';
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB;
 
-console.log(MONGODB_URI, MONGODB_DB); // Log the environment variables for debugging (remove in production)
-
 // --- Environment Variable Validation ---
 if (!MONGODB_URI) {
   console.error('CRITICAL ERROR: MONGODB_URI environment variable is not defined.');
@@ -24,7 +22,7 @@ if (!MONGODB_URI) {
     const user = protocolAndUser.length > 1 ? protocolAndUser[1].split(':')[0] : '[no user]';
     const hostPart = uriParts.length > 1 ? uriParts[1].split('/')[0] : '[unknown host]'; // Extract host part
     const maskedUri = uriParts.length > 1 ? `${protocolAndUser[0]}//${user}:<password>@${hostPart}` : MONGODB_URI;
-    console.log(`Attempting to use MONGODB_URI (masked): ${maskedUri}`);
+    // console.log(`Attempting to use MONGODB_URI (masked): ${maskedUri}`);
   } catch (e) {
     console.log('Attempting to use MONGODB_URI (unable to mask for logging).');
   }
@@ -80,8 +78,8 @@ async function dbConnect(): Promise<typeof mongoose> {
 
   // If no promise exists (or was reset), create a new connection promise
   if (!cached.promise) {
-    console.log('Creating new MongoDB connection promise.');
-    console.log(`Using MONGODB_URI from environment for connection: ${MONGODB_URI ? 'Loaded' : 'MISSING!'}`); // Explicitly log if URI is loaded
+    // console.log('Creating new MongoDB connection promise.');
+    // console.log(`Using MONGODB_URI from environment for connection: ${MONGODB_URI ? 'Loaded' : 'MISSING!'}`); // Explicitly log if URI is loaded
     console.log(`Using MONGODB_DB from environment: ${MONGODB_DB || 'MISSING!'}`); // Explicitly log DB name or if missing
 
     // Ensure environment variables are loaded before attempting connection
@@ -101,14 +99,14 @@ async function dbConnect(): Promise<typeof mongoose> {
     };
 
     // Log the connection options being used (excluding sensitive info if any were added)
-    console.log('Mongoose connection options being used:', opts); // Log the options
+    // console.log('Mongoose connection options being used:', opts); // Log the options
 
     // Start the connection attempt using MONGODB_URI and options
     console.log(`Attempting mongoose.connect with URI ending in ...${MONGODB_URI.slice(-20)} and DB: ${MONGODB_DB}`); // Log connection attempt details
     cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongooseInstance) => {
       // Log successful connection details
       const connection = mongooseInstance.connection;
-      console.log(`MongoDB connection promise resolved successfully. Connected to DB: ${connection.db.databaseName} on host: ${connection.host}:${connection.port}`);
+      // console.log(`MongoDB connection promise resolved successfully. Connected to DB: ${connection.db.databaseName} on host: ${connection.host}:${connection.port}`);
 
       // Add listeners for connection events (optional but good practice)
       connection.on('error', (err) => {
@@ -150,7 +148,7 @@ async function dbConnect(): Promise<typeof mongoose> {
 
   // Await the connection promise (either the existing one or the newly created one)
   try {
-    console.log('Awaiting MongoDB connection promise...');
+    // console.log('Awaiting MongoDB connection promise...');
     cached.conn = await cached.promise;
     // Double-check connection status after awaiting
     if (!cached.conn || cached.conn.connection.readyState !== 1) {

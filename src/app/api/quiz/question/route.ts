@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const quizSessionId = searchParams.get('quizSessionId'); // Get session ID from query params
 
     if (indexParam === null || quizSessionId === null) {
-        return NextResponse.json({ message: 'Missing question index or quiz session ID' }, { status: 400 });
+      return NextResponse.json({ message: 'Missing question index or quiz session ID' }, { status: 400 });
     }
 
     const index = parseInt(indexParam, 10);
@@ -29,14 +29,14 @@ export async function GET(request: NextRequest) {
     const quizState = await QuizState.findOne({ quizSessionId: quizSessionId });
 
     if (!quizState) {
-         // If session ID doesn't match any quiz state
-         return NextResponse.json({ message: 'Quiz session not found' }, { status: 404 });
+      // If session ID doesn't match any quiz state
+      return NextResponse.json({ message: 'Quiz session not found' }, { status: 404 });
     }
 
     // Special check: If the requested index is for the bonus question BUT the quiz is no longer active, treat as finished
     if (index === TOTAL_STANDARD_QUESTIONS && !quizState.isQuizActive) {
-         console.log(`Question API: Requested bonus question index (${index}) but quiz ${quizSessionId} is inactive. Returning finished.`);
-         return NextResponse.json({ isFinished: true }, { status: 200 });
+      //  console.log(`Question API: Requested bonus question index (${index}) but quiz ${quizSessionId} is inactive. Returning finished.`);
+      return NextResponse.json({ isFinished: true }, { status: 200 });
     }
 
 
@@ -48,50 +48,50 @@ export async function GET(request: NextRequest) {
 
     // Handle standard questions (index 0 to 9)
     if (index < TOTAL_STANDARD_QUESTIONS) {
-        if (index >= quizState.activeQuizQuestions.length) {
-             console.error(`Question API: Index ${index} is out of bounds for standard questions (Length: ${quizState.activeQuizQuestions.length}) in session ${quizSessionId}.`);
-             return NextResponse.json({ message: 'Question index out of bounds' }, { status: 404 });
-        }
+      if (index >= quizState.activeQuizQuestions.length) {
+        console.error(`Question API: Index ${index} is out of bounds for standard questions (Length: ${quizState.activeQuizQuestions.length}) in session ${quizSessionId}.`);
+        return NextResponse.json({ message: 'Question index out of bounds' }, { status: 404 });
+      }
 
-        const question: Question = quizState.activeQuizQuestions[index];
+      const question: Question = quizState.activeQuizQuestions[index];
 
-        // Return only necessary standard question details
-        const questionToSend = {
-          id: question.id,
-          questionText: question.questionText,
-          options: question.options,
-        };
-         console.log(`Question API: Returning standard question index ${index} for session ${quizSessionId}.`);
-        return NextResponse.json(questionToSend, {
-            status: 200,
-             headers: { 'Cache-Control': 'no-store, max-age=0' },
-          });
+      // Return only necessary standard question details
+      const questionToSend = {
+        id: question.id,
+        questionText: question.questionText,
+        options: question.options,
+      };
+      // console.log(`Question API: Returning standard question index ${index} for session ${quizSessionId}.`);
+      return NextResponse.json(questionToSend, {
+        status: 200,
+        headers: { 'Cache-Control': 'no-store, max-age=0' },
+      });
     }
     // Handle bonus question request (index 10)
     else if (index === TOTAL_STANDARD_QUESTIONS) {
-         if (!quizState.bonusQuestionText) {
-              // This case should ideally be handled by the 'next' API ending the quiz, but handle defensively
-              console.warn(`Question API: Requested bonus question index (${index}) but no bonus question text exists in session ${quizSessionId}. Ending quiz state assumed.`);
-              return NextResponse.json({ isFinished: true }, { status: 200 }); // Indicate finished
-         }
+      if (!quizState.bonusQuestionText) {
+        // This case should ideally be handled by the 'next' API ending the quiz, but handle defensively
+        console.warn(`Question API: Requested bonus question index (${index}) but no bonus question text exists in session ${quizSessionId}. Ending quiz state assumed.`);
+        return NextResponse.json({ isFinished: true }, { status: 200 }); // Indicate finished
+      }
 
-         // Return the bonus question structure
-         const bonusQuestionResponse = {
-             id: 'bonus-question', // Special ID
-             questionText: quizState.bonusQuestionText,
-             options: [], // No options for bonus question? Or maybe free-form input? Assuming no MC options.
-             isBonusQuestion: true, // Add a flag
-         };
-          console.log(`Question API: Returning bonus question for session ${quizSessionId}.`);
-         return NextResponse.json(bonusQuestionResponse, {
-             status: 200,
-             headers: { 'Cache-Control': 'no-store, max-age=0' },
-         });
+      // Return the bonus question structure
+      const bonusQuestionResponse = {
+        id: 'bonus-question', // Special ID
+        questionText: quizState.bonusQuestionText,
+        options: [], // No options for bonus question? Or maybe free-form input? Assuming no MC options.
+        isBonusQuestion: true, // Add a flag
+      };
+      // console.log(`Question API: Returning bonus question for session ${quizSessionId}.`);
+      return NextResponse.json(bonusQuestionResponse, {
+        status: 200,
+        headers: { 'Cache-Control': 'no-store, max-age=0' },
+      });
     }
     // Handle index out of bounds (greater than bonus question index)
     else {
-         console.error(`Question API: Index ${index} is out of bounds (greater than bonus question index ${TOTAL_STANDARD_QUESTIONS}) in session ${quizSessionId}.`);
-        return NextResponse.json({ message: 'Question index out of bounds' }, { status: 404 });
+      console.error(`Question API: Index ${index} is out of bounds (greater than bonus question index ${TOTAL_STANDARD_QUESTIONS}) in session ${quizSessionId}.`);
+      return NextResponse.json({ message: 'Question index out of bounds' }, { status: 404 });
     }
 
   } catch (error) {

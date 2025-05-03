@@ -12,14 +12,14 @@ export async function GET(request: NextRequest) {
   console.log('--- Quiz Stats Request Received ---');
   try {
     await dbConnect();
-    console.log('Quiz Stats: DB connected.');
+    // console.log('Quiz Stats: DB connected.');
 
     // 1. Find the *most recent* quiz session (active or inactive) by creation time
-    console.log('Quiz Stats: Searching for the most recent quiz session...');
+    // console.log('Quiz Stats: Searching for the most recent quiz session...');
     const lastQuizState = await QuizState.findOne().sort({ createdAt: -1 }); // Sort by creation time descending
 
     if (!lastQuizState) {
-      console.log('Quiz Stats: No quiz sessions found in the database.');
+      // console.log('Quiz Stats: No quiz sessions found in the database.');
       return NextResponse.json([], { // Return empty array if no quiz ever ran
         status: 200,
         headers: { 'Cache-Control': 'no-store, max-age=0' },
@@ -29,15 +29,15 @@ export async function GET(request: NextRequest) {
     const quizSessionId = lastQuizState.quizSessionId;
     const standardQuestions = lastQuizState.activeQuizQuestions; // Array of standard questions
     const totalStandardQuestions = standardQuestions.length;
-    console.log(`Quiz Stats: Found last session ${quizSessionId} (Active: ${lastQuizState.isQuizActive}) with ${totalStandardQuestions} standard questions.`);
+    // console.log(`Quiz Stats: Found last session ${quizSessionId} (Active: ${lastQuizState.isQuizActive}) with ${totalStandardQuestions} standard questions.`);
 
     // 2. Fetch all attempts for that specific quiz session
-    console.log(`Quiz Stats: Fetching all attempts for session ${quizSessionId}...`);
+    // console.log(`Quiz Stats: Fetching all attempts for session ${quizSessionId}...`);
     const attempts = await Attempt.find(
       { quizSessionId: quizSessionId },
       { answers: 1 } // Projection: only fetch the answers array
     );
-    console.log(`Quiz Stats: Found ${attempts.length} attempts for session ${quizSessionId}.`);
+    // console.log(`Quiz Stats: Found ${attempts.length} attempts for session ${quizSessionId}.`);
 
 
     // 3. Calculate statistics for each standard question
@@ -82,10 +82,10 @@ export async function GET(request: NextRequest) {
         incorrectCount: incorrectCount, // Add incorrect count
       });
 
-      console.log(`Quiz Stats: Q${i+1} - Correct: ${correctCount}, Incorrect: ${incorrectCount}, Total: ${totalAttemptsForQuestion}, Correct%: ${correctPercentage.toFixed(1)}, Incorrect%: ${incorrectPercentage.toFixed(1)}`);
+      // console.log(`Quiz Stats: Q${i + 1} - Correct: ${correctCount}, Incorrect: ${incorrectCount}, Total: ${totalAttemptsForQuestion}, Correct%: ${correctPercentage.toFixed(1)}, Incorrect%: ${incorrectPercentage.toFixed(1)}`);
     }
 
-    console.log('Quiz Stats: Statistics calculation complete.');
+    // console.log('Quiz Stats: Statistics calculation complete.');
     return NextResponse.json(questionStats, {
       status: 200,
       headers: {
@@ -96,11 +96,11 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Quiz Stats: Error fetching statistics:', error);
     if (error instanceof mongoose.Error) {
-         console.error('Quiz Stats: Mongoose specific error:', error.message);
-         return NextResponse.json({ message: `Database Error: ${error.message}` }, { status: 500 });
+      console.error('Quiz Stats: Mongoose specific error:', error.message);
+      return NextResponse.json({ message: `Database Error: ${error.message}` }, { status: 500 });
     }
     return NextResponse.json({ message: 'Internal Server Error fetching statistics' }, { status: 500 });
   } finally {
-      console.log('--- Quiz Stats Request Finished ---');
+    console.log('--- Quiz Stats Request Finished ---');
   }
 }
